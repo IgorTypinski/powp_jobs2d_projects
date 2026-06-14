@@ -1,52 +1,62 @@
 package edu.kis.powp.jobs2d.command;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.Arrays;
-
+import org.junit.jupiter.api.Test;
 import edu.kis.powp.jobs2d.command.visitor.ComplexCommandComparisonVisitor;
 
-public class ComplexCommandComparisonTest {
+class CommandComparisonTest {
 
-    public static void main(String[] args) {
+    private final ComplexCommandComparisonVisitor comparator = new ComplexCommandComparisonVisitor();
 
-        ComplexCommandComparisonVisitor visitor = new ComplexCommandComparisonVisitor();
-
-        // Identical simple commands are equal.
+    @Test
+    void identicalSimpleCommandsAreEqual() {
         SetPositionCommand a = new SetPositionCommand(1, 2);
         SetPositionCommand b = new SetPositionCommand(1, 2);
-        if (!visitor.areEqual(a, b)) {
-            throw new AssertionError("Identical SetPositionCommands should be equal");
-        }
 
-        // Different parameters make commands unequal.
-        SetPositionCommand c = new SetPositionCommand(1, 3);
-        if (visitor.areEqual(a, c)) {
-            throw new AssertionError("SetPositionCommands with different coordinates should not be equal");
-        }
+        assertTrue(comparator.areEqual(a, b));
+    }
 
-        // Different command types are unequal even with the same parameters.
-        OperateToCommand d = new OperateToCommand(1, 2);
-        if (visitor.areEqual(a, d)) {
-            throw new AssertionError("SetPositionCommand and OperateToCommand should not be equal");
-        }
+    @Test
+    void simpleCommandsWithDifferentCoordinatesAreNotEqual() {
+        SetPositionCommand a = new SetPositionCommand(1, 2);
+        SetPositionCommand b = new SetPositionCommand(1, 3);
 
-        // Structurally identical compound commands are equal, even with different names.
+        assertFalse(comparator.areEqual(a, b));
+    }
+
+    @Test
+    void differentLeafCommandTypesAreNotEqual() {
+        SetPositionCommand a = new SetPositionCommand(1, 2);
+        OperateToCommand b = new OperateToCommand(1, 2);
+
+        assertFalse(comparator.areEqual(a, b));
+    }
+
+    @Test
+    void structurallyIdenticalCompoundsWithDifferentNamesAreEqual() {
         CompoundCommand left = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(new SetPositionCommand(1, 1), new OperateToCommand(2, 2))), "left");
         CompoundCommand right = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(new SetPositionCommand(1, 1), new OperateToCommand(2, 2))), "right");
-        if (!visitor.areEqual(left, right)) {
-            throw new AssertionError("Structurally identical compound commands should be equal regardless of name");
-        }
 
-        // Order matters for compound commands.
+        assertTrue(comparator.areEqual(left, right));
+    }
+
+    @Test
+    void compoundsWithReorderedChildrenAreNotEqual() {
+        CompoundCommand original = new CompoundCommand(
+                new ArrayList<>(Arrays.asList(new SetPositionCommand(1, 1), new OperateToCommand(2, 2))), "left");
         CompoundCommand reordered = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(new OperateToCommand(2, 2), new SetPositionCommand(1, 1))), "left");
-        if (visitor.areEqual(left, reordered)) {
-            throw new AssertionError("Compound commands with reordered children should not be equal");
-        }
 
-        // Nested compound commands are compared recursively.
+        assertFalse(comparator.areEqual(original, reordered));
+    }
+
+    @Test
+    void nestedCompoundsWithIdenticalStructureAreEqual() {
         CompoundCommand innerLeft = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(new SetPositionCommand(5, 5))), "inner");
         CompoundCommand outerLeft = new CompoundCommand(
@@ -57,47 +67,48 @@ public class ComplexCommandComparisonTest {
         CompoundCommand outerRight = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(innerRight, new OperateToCommand(9, 9))), "different-outer-name");
 
-        if (!visitor.areEqual(outerLeft, outerRight)) {
-            throw new AssertionError("Nested compound commands with identical structure should be equal");
-        }
+        assertTrue(comparator.areEqual(outerLeft, outerRight));
+    }
 
-        // Changing a nested leaf command makes the structures unequal.
+    @Test
+    void nestedCompoundsDifferingInALeafAreNotEqual() {
+        CompoundCommand innerLeft = new CompoundCommand(
+                new ArrayList<>(Arrays.asList(new SetPositionCommand(5, 5))), "inner");
+        CompoundCommand outerLeft = new CompoundCommand(
+                new ArrayList<>(Arrays.asList(innerLeft, new OperateToCommand(9, 9))), "outer");
+
         CompoundCommand innerDifferent = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(new SetPositionCommand(5, 6))), "inner");
         CompoundCommand outerDifferent = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(innerDifferent, new OperateToCommand(9, 9))), "outer");
 
-        if (visitor.areEqual(outerLeft, outerDifferent)) {
-            throw new AssertionError("Compound commands differing in a nested leaf should not be equal");
-        }
+        assertFalse(comparator.areEqual(outerLeft, outerDifferent));
+    }
 
-        // Different number of children makes compound commands unequal.
+    @Test
+    void compoundsWithDifferentChildCountsAreNotEqual() {
+        CompoundCommand full = new CompoundCommand(
+                new ArrayList<>(Arrays.asList(new SetPositionCommand(1, 1), new OperateToCommand(2, 2))), "left");
         CompoundCommand shorter = new CompoundCommand(
                 new ArrayList<>(Arrays.asList(new SetPositionCommand(1, 1))), "left");
-        if (visitor.areEqual(left, shorter)) {
-            throw new AssertionError("Compound commands with different child counts should not be equal");
-        }
 
-        // Comparing an ImmutableCompoundCommand to an equivalent CompoundCommand.
+        assertFalse(comparator.areEqual(full, shorter));
+    }
+
+    @Test
+    void compoundCommandAndImmutableCompoundCommandWithSameStructureAreEqual() {
+        CompoundCommand left = new CompoundCommand(
+                new ArrayList<>(Arrays.asList(new SetPositionCommand(1, 1), new OperateToCommand(2, 2))), "left");
         ImmutableCompoundCommand immutable = new ImmutableCompoundCommand("immutable",
                 new ArrayList<>(Arrays.asList(new SetPositionCommand(1, 1), new OperateToCommand(2, 2))));
-        if (!visitor.areEqual(left, immutable)) {
-            throw new AssertionError("CompoundCommand and ImmutableCompoundCommand with same structure should be equal");
-        }
 
-        // null handling
-        if (!visitor.areEqual(null, null)) {
-            throw new AssertionError("Two null commands should be considered equal");
-        }
-        if (visitor.areEqual(a, null) || visitor.areEqual(null, a)) {
-            throw new AssertionError("A non-null command should not equal null");
-        }
+        assertTrue(comparator.areEqual(left, immutable));
+    }
 
-        // Same instance compared to itself.
-        if (!visitor.areEqual(a, a)) {
-            throw new AssertionError("A command should be equal to itself");
-        }
+    @Test
+    void commandIsEqualToItself() {
+        SetPositionCommand a = new SetPositionCommand(1, 2);
 
-        System.out.println("TEST PASSED");
+        assertTrue(comparator.areEqual(a, a));
     }
 }

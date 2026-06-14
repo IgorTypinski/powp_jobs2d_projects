@@ -1,6 +1,7 @@
 package edu.kis.powp.jobs2d.command.visitor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -9,97 +10,132 @@ import edu.kis.powp.jobs2d.command.ICompoundCommand;
 import edu.kis.powp.jobs2d.command.OperateToCommand;
 import edu.kis.powp.jobs2d.command.SetPositionCommand;
 
-public class ComplexCommandComparisonVisitor implements ICommandVisitor {
-
-    private static final class Token {
-        private final String kind;
-        private final int x;
-        private final int y;
-
-        private Token(String kind, int x, int y) {
-            this.kind = kind;
-            this.x = x;
-            this.y = y;
-        }
-
-        private static Token of(String kind) {
-            return new Token(kind, 0, 0);
-        }
-
-        private static Token of(String kind, int x, int y) {
-            return new Token(kind, x, y);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof Token)) {
-                return false;
-            }
-            Token other = (Token) o;
-            return x == other.x && y == other.y && Objects.equals(kind, other.kind);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(kind, x, y);
-        }
-
-        @Override
-        public String toString() {
-            switch (kind) {
-                case "SetPosition":
-                case "OperateTo":
-                    return kind + "(" + x + ", " + y + ")";
-                default:
-                    return kind;
-            }
-        }
-    }
-
-    private List<Token> tokens = new ArrayList<>();
-
-    @Override
-    public void visit(SetPositionCommand command) {
-        tokens.add(Token.of("SetPosition", command.getPosX(), command.getPosY()));
-    }
-
-    @Override
-    public void visit(OperateToCommand command) {
-        tokens.add(Token.of("OperateTo", command.getPosX(), command.getPosY()));
-    }
-
-    @Override
-    public void visit(ICompoundCommand command) {
-        tokens.add(Token.of("CompoundStart"));
-        for (DriverCommand child : (Iterable<DriverCommand>) command::iterator) {
-            child.accept(this);
-        }
-        tokens.add(Token.of("CompoundEnd"));
-    }
+public class ComplexCommandComparisonVisitor {
 
     public boolean areEqual(DriverCommand first, DriverCommand second) {
         if (first == second) {
             return true;
         }
-        if (first == null || second == null) {
-            return false;
+
+        return signatureOf(first).equals(signatureOf(second));
+    }
+
+    public boolean areEqual(ICompoundCommand first, ICompoundCommand second) {
+        return areEqual((DriverCommand) first, (DriverCommand) second);
+    }
+
+    private List<CommandToken> signatureOf(DriverCommand command) {
+        SignatureVisitor signatureVisitor = new SignatureVisitor();
+        command.accept(signatureVisitor);
+        return signatureVisitor.getSignature();
+    }
+
+    private abstract static class CommandToken {
+
+        static final class CompoundStart extends CommandToken {
+            static final CompoundStart INSTANCE = new CompoundStart();
+
+            private CompoundStart() {
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                return o instanceof CompoundStart;
+            }
+
+            @Override
+            public int hashCode() {
+                return CompoundStart.class.hashCode();
+            }
+
+            @Override
+            public String toString() {
+                return "CompoundStart";
+            }
         }
 
-        List<Token> firstTokens = collectTokens(first);
-        List<Token> secondTokens = collectTokens(second);
-        return firstTokens.equals(secondTokens);
+        static final class CompoundEnd extends CommandToken {
+            static final CompoundEnd INSTANCE = new CompoundEnd();
+
+            private CompoundEnd() {
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                return o instanceof CompoundEnd;
+            }
+
+            @Override
+            public int hashCode() {
+                return CompoundEnd.class.hashCode();
+            }
+
+            @Override
+            public String toString() {
+                return "CompoundEnd";
+            }
+        }
+
+        static final class PositionalLeaf extends CommandToken {
+            private final String kind;
+            private final int x;
+            private final int y;
+
+            PositionalLeaf(String kind, int x, int y) {
+                this.kind = Objects.requireNonNull(kind, "kind must not be null");
+                this.x = x;
+                this.y = y;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (!(o instanceof PositionalLeaf)) {
+                    return false;
+                }
+                PositionalLeaf other = (PositionalLeaf) o;
+                return x == other.x && y == other.y && kind.equals(other.kind);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(kind, x, y);
+            }
+
+            @Override
+            public String toString() {
+                return kind + "(" + x + ", " + y + ")";
+            }
+        }
     }
 
-    private List<Token> collectTokens(DriverCommand command) {
-        reset();
-        command.accept(this);
-        return new ArrayList<>(tokens);
-    }
+    private static final class SignatureVisitor implements ICommandVisitor {
 
-    public void reset() {
-        tokens.clear();
+        private final List<CommandToken> tokens = new ArrayList<>();
+
+        @Override
+        public void visit(SetPositionCommand command) {
+            tokens.add(new CommandToken.PositionalLeaf("SetPosition", command.getPosX(), command.getPosY()));
+        }
+
+        @Override
+        public void visit(OperateToCommand command) {
+            tokens.add(new CommandToken.PositionalLeaf("OperateTo", command.getPosX(), command.getPosY()));
+        }
+
+        @Override
+        public void visit(ICompoundCommand command) {
+            tokens.add(CommandToken.CompoundStart.INSTANCE);
+            for (DriverCommand child : (Iterable<DriverCommand>) command::iterator) {
+                child.accept(this);
+            }
+            tokens.add(CommandToken.CompoundEnd.INSTANCE);
+        }
+
+        List<CommandToken> getSignature() {
+            return Collections.unmodifiableList(new ArrayList<>(tokens));
+        }
     }
 }
